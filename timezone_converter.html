@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球時區換算器 (Timestamp 校驗版)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-bottom: 25px; }
+        .input-group {
+            display: flex; gap: 15px; margin-bottom: 20px;
+            align-items: flex-end; padding: 15px;
+            border: 1px dashed #ccc; border-radius: 8px; flex-wrap: wrap;
+        }
+        .input-group-local { background-color: #e6f7ff; border-color: #007bff; }
+        .input-group-timestamp { background-color: #fff0f0; border-color: #d9534f; }
+        .input-item { flex: 1; min-width: 160px; }
+        .input-item.full-width { flex: 2; min-width: 250px; }
+        .time-input-container {
+            display: flex; align-items: center; background: #fff;
+            border: 1px solid #ccc; border-radius: 6px;
+            height: 42px; padding: 0 10px; box-sizing: border-box;
+        }
+        .time-input-container input {
+            width: 45px; border: none !important; outline: none !important;
+            text-align: center; font-size: 16px; background: transparent;
+            padding: 0; margin: 0; appearance: textfield;
+        }
+        .time-input-container input::-webkit-inner-spin-button,
+        .time-input-container input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .time-input-container span { color: #888; font-weight: bold; margin: 0 2px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; color: #555; white-space: nowrap; }
+        select, input[type="date"], input[type="number"] {
+            padding: 0 15px; border-radius: 6px; border: 1px solid #ccc;
+            font-size: 16px; height: 42px; box-sizing: border-box; width: 100%;
+        }
+        .base-info-display { font-size: 0.95em; font-weight: bold; display: block; margin-top: 5px; white-space: nowrap; }
+        .base-info-display.timestamp { color: #28a745; }
+        .base-info-display.datetime { color: #d9534f; }
+        button {
+            height: 42px; padding: 0 20px; color: white; cursor: pointer;
+            border: none; border-radius: 6px; font-size: 16px; transition: 0.3s; white-space: nowrap;
+        }
+        #btnLocal { background-color: #28a745; }
+        #btnTimestamp { background-color: #d9534f; }
+
+        /* 結果列表 */
+        #results {
+            list-style: none; padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 10px; margin-top: 20px;
+        }
+        #results li {
+            background: #e9ecef; padding: 10px 14px;
+            border-radius: 4px; border-left: 5px solid #007bff;
+            display: flex; flex-direction: column; gap: 3px;
+        }
+        .result-datetime { font-size: 1.1em; }
+        .result-ts {
+            font-size: 0.82em; color: #555;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .copy-btn {
+            height: auto; padding: 1px 7px; font-size: 0.78em;
+            background: #6c757d; border-radius: 4px; cursor: pointer;
+            border: none; color: #fff; transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .copy-btn:hover { background: #495057; }
+        .copy-btn.copied { background: #28a745; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🌎 全球時區換算器 (Timestamp 校驗版)</h1>
+
+    <h3>🟢 模式一：以指定時區的日期/時間為基準換算</h3>
+    <div class="input-group input-group-local">
+        <div class="input-item">
+            <label for="inputDate">日期</label>
+            <input type="date" id="inputDate" required>
+        </div>
+        <div class="input-item">
+            <label>時間</label>
+            <div class="time-input-container">
+                <input type="number" id="inputHour" min="0" max="23" placeholder="HH">
+                <span>:</span>
+                <input type="number" id="inputMin" min="0" max="59" placeholder="MM">
+                <span>:</span>
+                <input type="number" id="inputSec" min="0" max="59" placeholder="SS">
+            </div>
+        </div>
+        <div class="input-item">
+            <label for="localUTCOffset">所屬時區</label>
+            <select id="localUTCOffset"></select>
+        </div>
+        <div class="input-item full-width">
+            <label>換算為 UTC 毫秒數基準 (Timestamp)</label>
+            <strong id="displayTimestampFromLocal" class="base-info-display timestamp">---</strong>
+        </div>
+        <button id="btnLocal" onclick="calculateTimezonesFromLocal()">開始換算</button>
+    </div>
+
+    <hr>
+
+    <h3>🔴 模式二：以 Unix Timestamp (毫秒) 為基準換算</h3>
+    <div class="input-group input-group-timestamp">
+        <div class="input-item full-width">
+            <label for="inputTimestamp">輸入 Unix Timestamp (毫秒)</label>
+            <input type="number" id="inputTimestamp" placeholder="例如: 1733798776000" required>
+        </div>
+        <div class="input-item">
+            <label for="targetUTCOffset">顯示 UTC 偏移時間</label>
+            <select id="targetUTCOffset"></select>
+        </div>
+        <div class="input-item full-width">
+            <label>對應指定時區的日期與時間</label>
+            <strong id="displayDateTimeFromTimestamp" class="base-info-display datetime">---</strong>
+        </div>
+        <button id="btnTimestamp" onclick="calculateTimezonesFromTimestamp()">開始換算</button>
+    </div>
+
+    <div id="results-header">換算結果 (24H 制)：</div>
+    <ul id="results"></ul>
+</div>
+
+<script>
+    const inputDate = document.getElementById('inputDate');
+    const inputHour = document.getElementById('inputHour');
+    const inputMin = document.getElementById('inputMin');
+    const inputSec = document.getElementById('inputSec');
+    const localUTCOffsetSelect = document.getElementById('localUTCOffset');
+    const inputTimestamp = document.getElementById('inputTimestamp');
+    const targetUTCOffsetSelect = document.getElementById('targetUTCOffset');
+    const resultsElement = document.getElementById('results');
+    const displayTimestampFromLocal = document.getElementById('displayTimestampFromLocal');
+    const displayDateTimeFromTimestamp = document.getElementById('displayDateTimeFromTimestamp');
+
+    function populateUTCOffsets(selectElement, defaultValue) {
+        for (let offset = 14; offset >= -12; offset--) {
+            const option = document.createElement('option');
+            const sign = offset >= 0 ? '+' : '';
+            const offsetStr = `${sign}${offset.toString().padStart(2, '0')}`;
+            option.value = offset;
+            option.textContent = `UTC${offsetStr}`;
+            if (offset === defaultValue) option.selected = true;
+            selectElement.appendChild(option);
+        }
+    }
+
+    function setInitialDateTimeAndTimestamp() {
+        const now = new Date();
+        const localOffsetHours = -now.getTimezoneOffset() / 60;
+        populateUTCOffsets(localUTCOffsetSelect, localOffsetHours);
+        populateUTCOffsets(targetUTCOffsetSelect, 0);
+        inputDate.value = now.toISOString().split('T')[0];
+        inputHour.value = now.getHours().toString().padStart(2, '0');
+        inputMin.value = now.getMinutes().toString().padStart(2, '0');
+        inputSec.value = now.getSeconds().toString().padStart(2, '0');
+        inputTimestamp.value = now.getTime();
+        calculateTimezonesFromLocal();
+    }
+
+    window.onload = setInitialDateTimeAndTimestamp;
+
+    function copyToClipboard(btn, text) {
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = '已複製!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = '複製';
+                btn.classList.remove('copied');
+            }, 1500);
+        });
+    }
+
+    function performConversion(absoluteUTCMs) {
+        resultsElement.innerHTML = '';
+        for (let offset = -12; offset <= 14; offset++) {
+            // 該時區的本地時間（用 UTC 方法讀取避免瀏覽器時區干擾）
+            const targetTime = new Date(absoluteUTCMs + (offset * 3600000));
+
+            const fTime =
+                targetTime.getUTCFullYear() + '/' +
+                (targetTime.getUTCMonth() + 1).toString().padStart(2, '0') + '/' +
+                targetTime.getUTCDate().toString().padStart(2, '0') + ' ' +
+                targetTime.getUTCHours().toString().padStart(2, '0') + ':' +
+                targetTime.getUTCMinutes().toString().padStart(2, '0') + ':' +
+                targetTime.getUTCSeconds().toString().padStart(2, '0');
+
+            // 該時區「本地午夜 00:00:00」的 UTC Timestamp（毫秒）
+            // = 當天 UTC 日期零點 - 偏移毫秒
+            const localMidnightUTC =
+                Date.UTC(
+                    targetTime.getUTCFullYear(),
+                    targetTime.getUTCMonth(),
+                    targetTime.getUTCDate(),
+                    0, 0, 0
+                ) - (offset * 3600000);
+
+            // 該時區「本地當下時刻」對應的秒級 Timestamp（即 absoluteUTCMs 本身，單位秒）
+            const tsSeconds = Math.floor(absoluteUTCMs / 1000);
+            const tsMs = absoluteUTCMs;
+            // 當天本地午夜秒級 Timestamp
+            const midnightTsSeconds = Math.floor(localMidnightUTC / 1000);
+
+            const offsetString = `UTC${offset >= 0 ? '+' : ''}${offset.toString().padStart(2, '0')}`;
+
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="result-datetime"><strong>${offsetString}</strong>: ${fTime}</div>
+                <div class="result-ts">
+                    <span>⏱ Timestamp (秒)：<strong>${tsSeconds}</strong></span>
+                    <button class="copy-btn" onclick="copyToClipboard(this, '${tsSeconds}')">複製</button>
+                </div>
+                <div class="result-ts">
+                    <span>⏱ Timestamp (毫秒)：<strong>${tsMs}</strong></span>
+                    <button class="copy-btn" onclick="copyToClipboard(this, '${tsMs}')">複製</button>
+                </div>
+            `;
+            resultsElement.appendChild(li);
+        }
+    }
+
+    function calculateTimezonesFromLocal() {
+        const dateStr = inputDate.value;
+        const h = parseInt(inputHour.value) || 0;
+        const m = parseInt(inputMin.value) || 0;
+        const s = parseInt(inputSec.value) || 0;
+        const offset = Number(localUTCOffsetSelect.value);
+        if (!dateStr) return;
+        const parts = dateStr.split('-');
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const day = parseInt(parts[2]);
+        const rawMs = Date.UTC(year, month, day, h, m, s);
+        const absoluteUTCMs = rawMs - (offset * 3600000);
+        displayTimestampFromLocal.textContent = absoluteUTCMs;
+        displayDateTimeFromTimestamp.textContent = '---';
+        performConversion(absoluteUTCMs);
+    }
+
+    function calculateTimezonesFromTimestamp() {
+        const ms = Number(inputTimestamp.value);
+        const offset = Number(targetUTCOffsetSelect.value);
+        if (isNaN(ms)) return;
+        const targetTime = new Date(ms + (offset * 3600000));
+        displayDateTimeFromTimestamp.textContent =
+            targetTime.getUTCFullYear() + '-' +
+            (targetTime.getUTCMonth() + 1).toString().padStart(2, '0') + '-' +
+            targetTime.getUTCDate().toString().padStart(2, '0') + ' ' +
+            targetTime.getUTCHours().toString().padStart(2, '0') + ':' +
+            targetTime.getUTCMinutes().toString().padStart(2, '0') + ':' +
+            targetTime.getUTCSeconds().toString().padStart(2, '0');
+        displayTimestampFromLocal.textContent = '---';
+        performConversion(ms);
+    }
+</script>
+</body>
+</html>
