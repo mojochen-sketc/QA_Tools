@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log 智慧分析工具</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background: #f5f6fa;
+    color: #2d2d2d;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; font-weight: 600; color: #1a1a2e; }
+  header p  { font-size: 13px; color: #888; }
+
+  .step-indicator {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .step-pip {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid #ddd;
+    color: #bbb;
+    transition: all .2s;
+  }
+  .step-pip.active  { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+  .step-pip.done    { background: #34a853; border-color: #34a853; color: #fff; }
+  .step-line { width: 20px; height: 1.5px; background: #e0e0e0; }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+  }
+  .panel + .panel { border-left: 1px solid #e0e0e0; }
+
+  .panel-header {
+    padding: 12px 18px;
+    border-bottom: 1px solid #e8e8e8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .panel-header h2 { font-size: 13px; font-weight: 600; color: #333; }
+  .panel-header .hint { font-size: 12px; color: #aaa; margin-left: auto; }
+
+  textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 16px 18px;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    resize: none;
+    color: #333;
+    background: #fafafa;
+  }
+
+  .action-bar {
+    padding: 10px 18px;
+    border-top: 1px solid #e8e8e8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: #1a73e8; color: #fff; }
+  .btn-primary:hover { background: #1557b0; }
+  .btn-primary:disabled { background: #b0c4e8; cursor: not-allowed; }
+  .btn-green  { background: #34a853; color: #fff; }
+  .btn-green:hover { background: #2d8e47; }
+  .btn-outline { background: none; border: 1px solid #ddd; color: #666; }
+  .btn-outline:hover { background: #f5f5f5; }
+
+  .char-count { font-size: 12px; color: #bbb; margin-left: auto; }
+
+  /* ── 右側結果 ── */
+  #resultPanel { flex: 1; overflow-y: auto; padding: 16px 18px; }
+
+  .empty-state {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; color: #ccc;
+  }
+  .empty-state svg { width: 44px; height: 44px; opacity: .35; }
+  .empty-state p { font-size: 13px; }
+
+  .status-error   { background: #fff0ee; color: #bf360c; }
+  .status-success { background: #e8f5e9; color: #2e7d32; }
+
+  /* ── 分析結果 UI ── */
+  .stat-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 500; border: 1px solid transparent;
+  }
+  .chip-critical { background:#fde8e8; color:#c62828; border-color:#ef9a9a; }
+  .chip-error    { background:#fff0ee; color:#bf360c; border-color:#ffab91; }
+  .chip-warning  { background:#fff8e1; color:#7a5700; border-color:#ffe082; }
+  .chip-info     { background:#f5f5f5; color:#555;    border-color:#e0e0e0; }
+  .chip-dot { width:7px; height:7px; border-radius:50%; }
+  .dot-critical{background:#e53935;} .dot-error{background:#f4511e;}
+  .dot-warning{background:#fbc02d;} .dot-info{background:#9e9e9e;}
+
+  .section-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    color: #aaa; text-transform: uppercase; margin: 14px 0 6px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  .log-line {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 4px 8px; border-radius: 4px; margin-bottom: 2px;
+    font-family: 'Menlo','Consolas', monospace;
+    font-size: 11.5px; line-height: 1.6;
+  }
+  .log-line.sev-critical { background:#fde8e8; border-left:3px solid #e53935; }
+  .log-line.sev-error    { background:#fff0ee; border-left:3px solid #f4511e; }
+  .log-line.sev-warning  { background:#fff8e1; border-left:3px solid #fbc02d; }
+  .log-line.sev-info     { background:#f5f5f5; border-left:3px solid #bdbdbd; }
+  .log-line.sev-normal   { border-left:3px solid transparent; }
+
+  .sev-badge {
+    flex-shrink:0; font-size:10px; font-weight:700;
+    padding:1px 6px; border-radius:3px;
+    min-width:54px; text-align:center;
+    letter-spacing:.04em; margin-top:2px;
+  }
+  .badge-critical{background:#e53935;color:#fff;}
+  .badge-error   {background:#f4511e;color:#fff;}
+  .badge-warning {background:#fbc02d;color:#5a3e00;}
+  .badge-info    {background:#e0e0e0;color:#555;}
+  .badge-normal  {background:transparent;color:transparent;}
+  .line-text { flex:1; white-space:pre-wrap; word-break:break-all; color:#333; }
+
+  .summary-card { border:1px solid #e8e8e8; border-radius:8px; margin-bottom:10px; overflow:hidden; }
+  .summary-card-header {
+    padding:9px 14px; font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:8px;
+  }
+  .summary-card-body {
+    padding:10px 14px; font-size:13px; line-height:1.75;
+    color:#444; border-top:1px solid #f0f0f0; white-space:pre-wrap;
+  }
+  .card-error   .summary-card-header{background:#fff0ee;color:#c0392b;}
+  .card-root    .summary-card-header{background:#fff8e1;color:#856404;}
+  .card-suggest .summary-card-header{background:#e8f5e9;color:#2e7d32;}
+
+  .spinner {
+    width:14px;height:14px;
+    border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff;
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+    display:inline-block;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 Log 智慧分析</h1>
+  <p>免 API Key，與 Claude 協作分析</p>
+  <div class="step-indicator">
+    <div class="step-pip active" id="pip1">1</div>
+    <div class="step-line"></div>
+    <div class="step-pip" id="pip2">2</div>
+    <div class="step-line"></div>
+    <div class="step-pip" id="pip3">3</div>
+  </div>
+</header>
+
+<main>
+  <!-- 左側：Log 輸入（cURL + Response 雙欄） -->
+  <div class="panel" style="display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <h2>📋 步驟1：貼上 Request & Response</h2>
+      <span class="hint" id="lineCount">0 行</span>
+    </div>
+
+    <!-- cURL 輸入區 -->
+    <div style="flex:1;display:flex;flex-direction:column;border-bottom:1.5px solid #e8e8e8;min-height:0;">
+      <div style="padding:6px 18px 4px;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:600;letter-spacing:.06em;color:#888;text-transform:uppercase;">cURL Request</span>
+        <span style="font-size:11px;color:#bbb;">（F12 → 右鍵請求 → Copy as cURL）</span>
+      </div>
+      <textarea id="logInput"
+        style="flex:1;border:none;outline:none;padding:8px 18px 12px;font-family:Menlo,Consolas,monospace;font-size:12px;line-height:1.7;resize:none;color:#333;background:#fafafa;min-height:0;"
+        placeholder="curl 'https://...' \
+  -H 'accept: application/json' \
+  -H 'authorization: Bearer ...' \
+  ..." oninput="updateLineCount()"></textarea>
+    </div>
+
+    <!-- Response 輸入區 -->
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;height:130px;">
+      <div style="padding:6px 18px 4px;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:600;letter-spacing:.06em;color:#888;text-transform:uppercase;">Response</span>
+        <span style="font-size:11px;color:#bbb;">（F12 → 點請求 → 回應分頁）</span>
+      </div>
+      <textarea id="responseInput"
+        style="flex:1;border:none;outline:none;padding:4px 18px 10px;font-family:Menlo,Consolas,monospace;font-size:12px;line-height:1.7;resize:none;color:#333;background:#f0f7ff;"
+        placeholder='{"message":"...", "code": ...}'></textarea>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-primary" id="genBtn" onclick="generatePrompt()">🚀 產生分析 Prompt</button>
+      <button class="btn btn-outline" onclick="clearAll()">清除</button>
+      <span class="char-count" id="charCount">0 字元</span>
+    </div>
+  </div>
+
+  <!-- 右側：分析結果（上）+ 固定貼上區（下） -->
+  <div class="panel" id="rightPanel" style="display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <h2>📊 分析結果</h2>
+    </div>
+    <div id="resultPanel" style="flex:1;overflow-y:auto;padding:16px 18px;">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+        </svg>
+        <p>步驟1 產生 Prompt → 貼到 Claude → 貼回下方輸入框</p>
+      </div>
+    </div>
+
+    <!-- 固定在底部的貼上區 -->
+    <div id="pasteArea" style="border-top:1.5px solid #e0e0e0;background:#fff;padding:12px 18px;flex-shrink:0;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:#aaa;text-transform:uppercase;margin-bottom:8px;">
+        步驟2：貼上 Claude 回覆
+      </div>
+      <textarea id="resultInput"
+        style="width:100%;height:90px;border:1.5px solid #ddd;border-radius:8px;padding:9px 12px;font-family:monospace;font-size:12px;resize:none;outline:none;transition:border .2s;"
+        placeholder="將 Claude 回覆的 JSON 貼在這裡，然後點「解析」..."
+        onfocus="this.style.borderColor='#1a73e8'"
+        onblur="this.style.borderColor='#ddd'"></textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <button class="btn btn-primary" onclick="parseAndRender()" style="padding:7px 18px;font-size:13px;">✅ 解析結果</button>
+        <button class="btn btn-outline" onclick="document.getElementById('resultInput').value=''" style="padding:7px 12px;font-size:13px;">清除</button>
+        <div id="parseStatus" style="font-size:12px;padding:4px 8px;border-radius:6px;display:none;"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 步驟1：Prompt 對話框 -->
+<div id="promptModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;width:680px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:16px 20px;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:14px;font-weight:600;">📝 分析 Prompt 已產生</span>
+      <button class="btn btn-outline" style="margin-left:auto;padding:5px 12px;font-size:12px;" onclick="closeModal()">✕ 關閉</button>
+    </div>
+    <div style="padding:14px 20px;background:#fff8e1;border-bottom:1px solid #ffe082;font-size:13px;color:#856404;line-height:1.6;">
+      📌 複製下方完整內容 → 貼到 <strong>Claude.ai</strong> 對話 → 等 Claude 回覆 JSON → 貼入右側步驟2
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 20px;">
+      <pre id="promptContent" style="font-family:monospace;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:#333;background:#fafafa;border:1px solid #eee;border-radius:6px;padding:12px;"></pre>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid #e8e8e8;display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-green" id="copyBtn" onclick="copyPrompt()">📋 複製 Prompt</button>
+      <button class="btn btn-primary" onclick="closeModal()">完成，前往 Claude</button>
+      <span id="copyHint" style="font-size:12px;color:#34a853;display:none;">✅ 已複製！</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function updateLineCount() {
+  const text  = document.getElementById('logInput').value;
+  const lines = text.trim() ? text.trim().split('\n').length : 0;
+  document.getElementById('lineCount').textContent = lines + ' 行';
+  document.getElementById('charCount').textContent = text.length + ' 字元';
+}
+
+function clearAll() {
+  document.getElementById('logInput').value = '';
+  if (document.getElementById('responseInput')) document.getElementById('responseInput').value = '';
+  updateLineCount();
+  setPip(1);
+  document.getElementById('resultPanel').innerHTML = `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+      </svg>
+      <p>步驟1 產生 Prompt → 貼到 Claude → 步驟2 貼回結果</p>
+    </div>`;
+}
+
+function setPip(step) {
+  [1,2,3].forEach(i => {
+    const pip = document.getElementById('pip' + i);
+    pip.className = 'step-pip' + (i < step ? ' done' : i === step ? ' active' : '');
+  });
+}
+
+function generatePrompt() {
+  const curlText     = document.getElementById('logInput').value.trim();
+  const responseText = document.getElementById('responseInput').value.trim();
+  if (!curlText) { alert('請先貼上 cURL Request 內容'); return; }
+
+  // 合併 cURL + Response 成完整 Log 內容
+  const logText = responseText
+    ? curlText + '\nResponse: ' + responseText
+    : curlText;
+
+  const lines = logText.split('\n');
+
+  const prompt =
+`你是一位資深系統工程師，擅長分析應用程式 Log。
+
+請分析以下 Log，並嚴格以 JSON 格式回傳，不要有任何其他說明文字：
+
+{
+  "lines": [
+    {
+      "lineNum": 1,
+      "severity": "CRITICAL 或 ERROR 或 WARNING 或 INFO 或 NORMAL",
+      "text": "原始行文字（保持不變）"
+    }
+  ],
+  "errorSummary": "發現的主要錯誤摘要（條列式，每條用\\n分隔）",
+  "rootCause": "根因推測（詳細說明最可能的問題來源，包含推論依據）",
+  "suggestions": "建議的排查或修復步驟（條列式，每條用\\n分隔）"
+}
+
+嚴重程度定義：
+- CRITICAL：系統崩潰、資料遺失、無法恢復的錯誤
+- ERROR：功能失敗、例外拋出、需要立即處理
+- WARNING：潛在問題、效能警告、非致命異常
+- INFO：一般資訊、操作記錄
+- NORMAL：其他（debug、trace 等）
+
+【重要判斷規則】
+在分析前，請先判斷輸入的類型：
+
+1. 若輸入為「純 Request」（只有 curl 指令或 HTTP Request Header，無 Response）：
+   - 正常分析 Request 內容（URL 路徑、參數、Token、Header 等）
+   - 標記各行 severity（通常為 INFO 或 NORMAL）
+   - errorSummary 開頭註明「此筆為純 Request 紀錄，未含 Response」，後續列出 Request 本身值得注意的觀察點
+   - rootCause 根據 Request 內容推測可能的問題點（如 URL 路徑異常、參數錯誤、Token 格式等）
+   - suggestions 提供排查建議，並提醒可補上 Response 以獲得更完整分析
+
+2. 若輸入包含 Response（有 HTTP 狀態碼、Response Body、錯誤訊息，或含 "Response:" 前綴）：
+   - 依照實際內容進行完整分析，標記嚴重程度並推測根因
+   - 若有 "Response:" 前綴，該行及之後視為 API 回應納入分析
+
+3. 若輸入為一般應用程式 Log（非 HTTP Request）：
+   - 依照實際內容進行完整分析
+
+Log 內容（共 ${lines.length} 行）：
+${logText}
+
+只輸出 JSON，不要有任何說明文字或 markdown 標記。`;
+
+  document.getElementById('promptContent').textContent = prompt;
+  document.getElementById('promptModal').style.display = 'flex';
+  setPip(2);
+
+}
+
+function copyPrompt() {
+  const text = document.getElementById('promptContent').textContent;
+  const hint = document.getElementById('copyHint');
+
+  // 先嘗試新 API，失敗則 fallback 到 execCommand（相容 file:// 開啟）
+  function showSuccess() {
+    hint.style.display = 'inline';
+    setTimeout(() => { hint.style.display = 'none'; }, 2500);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showSuccess).catch(() => fallbackCopy(text, showSuccess));
+  } else {
+    fallbackCopy(text, showSuccess);
+  }
+}
+
+function fallbackCopy(text, callback) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    if (callback) callback();
+  } catch(e) {
+    alert('複製失敗，請手動全選（Ctrl+A）後複製');
+  }
+  document.body.removeChild(ta);
+}
+
+function closeModal() {
+  document.getElementById('promptModal').style.display = 'none';
+}
+
+function openStep2() {
+  // 固定顯示，直接 scroll 到貼上區
+  const area = document.getElementById('pasteArea');
+  if (area) area.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  setPip(2);
+}
+
+function closeStep2() {
+  // overlay 已移除，清空輸入即可
+  document.getElementById('resultInput').value = '';
+  document.getElementById('parseStatus').style.display = 'none';
+}
+
+function parseAndRender() {
+  const raw    = document.getElementById('resultInput').value.trim();
+  const status = document.getElementById('parseStatus');
+
+  if (!raw) {
+    showStatus('error', '請貼上 Claude 的回覆內容');
+    return;
+  }
+
+  // ★ 防呆：偵測是否貼了 prompt 本身而非 Claude 的回覆
+  const promptSignatures = [
+    '你是一位資深系統工程師',
+    'Log 內容（共',
+    '只輸出 JSON，不要有任何說明文字',
+    '嚴重程度定義：',
+    '【重要判斷規則】'
+  ];
+  const isPastedPrompt = promptSignatures.filter(sig => raw.includes(sig)).length >= 2;
+  if (isPastedPrompt) {
+    showStatus('error', '偵測到貼入的是「Prompt 本身」而非 Claude 的回覆。請將此 Prompt 貼到 Claude.ai，再把 Claude 回傳的 JSON 貼回這裡。');
+    return;
+  }
+
+  let result;
+  try {
+    const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const first = clean.indexOf('{');
+    const last  = clean.lastIndexOf('}');
+    if (first === -1 || last === -1) throw new Error('找不到 JSON 結構');
+    result = JSON.parse(clean.substring(first, last + 1));
+  } catch(e) {
+    showStatus('error', '解析失敗：' + e.message + '　請確認 Claude 的回覆是完整的 JSON 格式');
+    return;
+  }
+
+  if (!result.lines || !Array.isArray(result.lines)) {
+    showStatus('error', 'JSON 結構不正確，缺少 lines 陣列');
+    return;
+  }
+
+  document.getElementById('resultInput').value = '';
+  renderResult(result);
+  setPip(3);
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('parseStatus');
+  el.className = type === 'error' ? 'status-error' : 'status-success';
+  el.style.cssText += ';display:block;';
+  el.textContent = (type === 'error' ? '❌ ' : '✅ ') + msg;
+  el.style.display = 'block';
+}
+
+function renderResult(result) {
+  const panel = document.getElementById('resultPanel');
+
+  // 統計
+  const counts = { CRITICAL: 0, ERROR: 0, WARNING: 0, INFO: 0 };
+  (result.lines || []).forEach(l => {
+    const s = (l.severity || '').toUpperCase();
+    if (counts[s] !== undefined) counts[s]++;
+  });
+
+  let statHtml = '<div class="stat-bar">';
+  if (counts.CRITICAL) statHtml += `<div class="stat-chip chip-critical"><span class="chip-dot dot-critical"></span>CRITICAL ${counts.CRITICAL}</div>`;
+  if (counts.ERROR)    statHtml += `<div class="stat-chip chip-error"><span class="chip-dot dot-error"></span>ERROR ${counts.ERROR}</div>`;
+  if (counts.WARNING)  statHtml += `<div class="stat-chip chip-warning"><span class="chip-dot dot-warning"></span>WARNING ${counts.WARNING}</div>`;
+  if (counts.INFO)     statHtml += `<div class="stat-chip chip-info"><span class="chip-dot dot-info"></span>INFO ${counts.INFO}</div>`;
+  statHtml += '</div>';
+
+  // 逐行
+  let linesHtml = '<div class="section-label">逐行標記</div>';
+  (result.lines || []).forEach(line => {
+    const sev   = (line.severity || 'NORMAL').toUpperCase();
+    const cls   = 'sev-' + sev.toLowerCase();
+    const badge = sev !== 'NORMAL'
+      ? `<span class="sev-badge badge-${sev.toLowerCase()}">${sev}</span>`
+      : `<span class="sev-badge badge-normal"></span>`;
+    linesHtml += `<div class="log-line ${cls}">${badge}<span class="line-text">${escHtml(line.text || '')}</span></div>`;
+  });
+
+  // 摘要卡片
+  let summaryHtml = '<div class="section-label" style="margin-top:16px;">AI 分析</div>';
+  if (result.errorSummary) summaryHtml += card('card-error',   '🚨 錯誤摘要', result.errorSummary);
+  if (result.rootCause)    summaryHtml += card('card-root',    '🔎 根因推測', result.rootCause);
+  if (result.suggestions)  summaryHtml += card('card-suggest', '💡 排查建議', result.suggestions);
+
+  panel.innerHTML = statHtml + linesHtml + summaryHtml;
+}
+
+function card(cls, title, body) {
+  return `<div class="summary-card ${cls}">
+    <div class="summary-card-header">${title}</div>
+    <div class="summary-card-body">${escHtml(body)}</div>
+  </div>`;
+}
+
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
