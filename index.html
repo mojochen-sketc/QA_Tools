@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA 工具入口</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background: #f5f6fa;
+    color: #2d2d2d;
+    min-height: 100vh;
+  }
+
+  /* ── 登入頁 ── */
+  #loginPage {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .login-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    padding: 48px 40px;
+    width: 380px;
+    text-align: center;
+  }
+  .login-logo {
+    width: 56px; height: 56px;
+    background: #e8f0fe;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    margin: 0 auto 20px;
+  }
+  .login-title { font-size: 20px; font-weight: 600; color: #1a1a2e; margin-bottom: 6px; }
+  .login-sub { font-size: 13px; color: #888; margin-bottom: 32px; line-height: 1.6; }
+  #googleBtn { display: flex; justify-content: center; }
+  .login-note { font-size: 12px; color: #bbb; margin-top: 20px; }
+
+  /* 無權限提示 */
+  #denyPage {
+    min-height: 100vh; display: none;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; text-align: center;
+  }
+  .deny-icon { font-size: 48px; }
+  .deny-title { font-size: 18px; font-weight: 600; color: #c0392b; }
+  .deny-sub { font-size: 13px; color: #888; }
+  .deny-email { font-size: 13px; color: #555; background: #f5f5f5; padding: 6px 16px; border-radius: 20px; }
+  .btn-logout-deny {
+    margin-top: 8px; background: none; border: 1px solid #ddd;
+    border-radius: 8px; padding: 8px 20px; font-size: 13px; color: #666; cursor: pointer;
+  }
+  .btn-logout-deny:hover { background: #f5f5f5; }
+
+  /* ── 主頁面 ── */
+  #mainPage { display: none; }
+
+  header {
+    background: #fff; border-bottom: 1px solid #e0e0e0;
+    padding: 0 32px; height: 60px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .header-logo {
+    width: 32px; height: 32px; background: #e8f0fe;
+    border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .header-title { font-size: 16px; font-weight: 600; color: #1a1a2e; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .user-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid #e0e0e0; object-fit: cover; }
+  .user-name { font-size: 13px; color: #555; }
+  .btn-logout {
+    background: none; border: 1px solid #ddd; border-radius: 8px;
+    padding: 6px 14px; font-size: 12px; color: #666; cursor: pointer; transition: background .15s;
+  }
+  .btn-logout:hover { background: #f5f5f5; }
+
+  /* ── 工具卡片區 ── */
+  .container { max-width: 960px; margin: 40px auto; padding: 0 24px; }
+  .page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin-bottom: 4px; }
+  .page-sub { font-size: 14px; color: #888; margin-bottom: 32px; }
+
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .tool-card {
+    background: #fff; border: 1px solid #e8e8e8; border-radius: 14px;
+    padding: 24px; cursor: pointer; transition: border-color .15s, transform .1s;
+    text-decoration: none; display: block; color: inherit;
+  }
+  .tool-card:hover { border-color: #1a73e8; transform: translateY(-2px); }
+  .tool-card-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin-bottom: 14px;
+  }
+  .icon-blue   { background: #e8f0fe; }
+  .icon-green  { background: #e8f5e9; }
+  .icon-purple { background: #ede7f6; }
+  .icon-orange { background: #fff3e0; }
+
+  .tool-card-title { font-size: 15px; font-weight: 600; color: #1a1a2e; margin-bottom: 6px; }
+  .tool-card-desc { font-size: 13px; color: #888; line-height: 1.6; }
+  .tool-card-tag {
+    display: inline-block; margin-top: 14px; font-size: 11px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px; background: #f5f5f5; color: #666;
+  }
+  .tag-blue   { background: #e8f0fe; color: #1a73e8; }
+  .tag-green  { background: #e8f5e9; color: #2e7d32; }
+  .tag-purple { background: #ede7f6; color: #6a1b9a; }
+  .tag-orange { background: #fff3e0; color: #e65100; }
+
+  .section-title {
+    font-size: 12px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: #aaa; margin: 36px 0 14px;
+  }
+  .section-title:first-child { margin-top: 0; }
+</style>
+</head>
+<body>
+
+<!-- ① 登入頁 -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">🛠</div>
+    <div class="login-title">QA 工具中心</div>
+    <div class="login-sub">請使用公司 Google 帳號登入<br>僅限授權人員存取</div>
+    <div id="googleBtn"></div>
+    <div class="login-note">登入即代表你已閱讀並同意內部使用規範</div>
+  </div>
+</div>
+
+<!-- ② 無權限頁 -->
+<div id="denyPage">
+  <div class="deny-icon">🚫</div>
+  <div class="deny-title">無存取權限</div>
+  <div class="deny-sub">你的帳號尚未被加入授權名單</div>
+  <div class="deny-email" id="denyEmail"></div>
+  <div class="deny-sub">請聯繫管理員申請存取權限</div>
+  <button class="btn-logout-deny" onclick="signOut()">切換帳號</button>
+</div>
+
+<!-- ③ 主頁面 -->
+<div id="mainPage">
+  <header>
+    <div class="header-logo">🛠</div>
+    <span class="header-title">QA 工具中心</span>
+    <div class="header-right">
+      <img id="userAvatar" class="user-avatar" src="" alt="avatar" onerror="this.style.display='none'">
+      <span class="user-name" id="userName"></span>
+      <button class="btn-logout" onclick="signOut()">登出</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="page-title">工具總覽</div>
+    <div class="page-sub" id="welcomeMsg"></div>
+
+    <div class="section-title">測試輔助</div>
+    <div class="tools-grid">
+
+      <a class="tool-card" href="log-analyzer.html">
+        <div class="tool-card-icon icon-blue">🔍</div>
+        <div class="tool-card-title">Log 智慧分析</div>
+        <div class="tool-card-desc">貼上 cURL 與 Response，AI 自動標記嚴重程度、推測根因並給出排查建議。</div>
+        <span class="tool-card-tag tag-blue">免 API Key</span>
+      </a>
+
+      <a class="tool-card" href="timezone-converter.html">
+        <div class="tool-card-icon icon-orange">🌎</div>
+        <div class="tool-card-title">全球時區換算器</div>
+        <div class="tool-card-desc">輸入日期時間或 Unix Timestamp，自動換算所有時區對應時間，支援毫秒一鍵複製。</div>
+        <span class="tool-card-tag tag-orange">Timestamp 校驗</span>
+      </a>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '120464574453-abl0no1qrnsaqnnpbidt5hv4cfg7dudj.apps.googleusercontent.com';
+
+const ALLOWED_EMAILS = [
+  'mojo@starcloudsoft.com.tw',
+];
+
+const ALLOWED_DOMAINS = [
+  'starcloudsoft.com.tw',
+];
+
+const USE_DOMAIN_WHITELIST = true;
+
+const SESSION_KEY = 'qa_portal_user';
+
+function isAllowed(email) {
+  if (USE_DOMAIN_WHITELIST) {
+    const domain = email.split('@')[1];
+    return ALLOWED_DOMAINS.includes(domain);
+  }
+  return ALLOWED_EMAILS.includes(email.toLowerCase());
+}
+
+function showPage(name) {
+  document.getElementById('loginPage').style.display  = name === 'login'  ? 'flex'  : 'none';
+  document.getElementById('denyPage').style.display   = name === 'deny'   ? 'flex'  : 'none';
+  document.getElementById('mainPage').style.display   = name === 'main'   ? 'block' : 'none';
+}
+
+function loginSuccess(user) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  if (!isAllowed(user.email)) {
+    document.getElementById('denyEmail').textContent = user.email;
+    showPage('deny');
+    return;
+  }
+  document.getElementById('userAvatar').src = user.picture || '';
+  document.getElementById('userName').textContent = user.name || user.email;
+  document.getElementById('welcomeMsg').textContent =
+    '歡迎回來，' + (user.name || user.email) + '！請選擇要使用的工具。';
+  showPage('main');
+}
+
+function signOut() {
+  sessionStorage.removeItem(SESSION_KEY);
+  google.accounts.id.disableAutoSelect();
+  showPage('login');
+}
+
+function handleCredentialResponse(response) {
+  const payload = parseJwt(response.credential);
+  loginSuccess({ email: payload.email, name: payload.name, picture: payload.picture });
+}
+
+function parseJwt(token) {
+  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(decodeURIComponent(
+    atob(base64).split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    ).join('')
+  ));
+}
+
+window.addEventListener('load', function() {
+  const saved = sessionStorage.getItem(SESSION_KEY);
+  if (saved) {
+    try { loginSuccess(JSON.parse(saved)); return; }
+    catch(e) { sessionStorage.removeItem(SESSION_KEY); }
+  }
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback:  handleCredentialResponse,
+    auto_select: false,
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('googleBtn'),
+    { theme: 'outline', size: 'large', text: 'signin_with', locale: 'zh-TW', width: 280 }
+  );
+  showPage('login');
+});
+</script>
+</body>
+</html>
